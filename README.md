@@ -5,7 +5,7 @@ A scalable command-line parser inspired by [commander.js](https://github.com/tj/
 Commander-scala is available on [Maven Central](http://mvnrepository.com/artifact/com.github.acrisci/commander_2.11).
 
 ```scala
-libraryDependencies += "com.github.acrisci" % "commander_2.11" % "0.1.0"
+libraryDependencies += "com.github.acrisci" %% "commander" % "0.1.1"
 ```
 
 ## Option parsing

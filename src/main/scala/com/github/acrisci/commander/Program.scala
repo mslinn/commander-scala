@@ -40,103 +40,61 @@ import scala.reflect.ClassTag
   * @param exitOnCommand deprecated - do not use
   */
 class Program(exitOnError: Boolean = true, exitOnCommand: Boolean = true) extends Dynamic {
-  /**
-    * Unknown arguments not given to an option will be stored here.
-    */
+  /** Unknown arguments not given to an option will be stored here. */
   var args: List[String] = Nil
 
-  /**
-    * The version of this program. This will be printed when `-v` or `--version`
-    * is given on the command line (TODO).
-    */
+  /** The version of this program. This will be printed when `-v` or `--version` is given on the command line (TODO). */
   var version: String = ""
 
   private def hasVersion = version != ""
 
-  /**
-    * A useful description to be printed in the help string of this program.
-    */
+  /** A useful description to be printed in the help string of this program. */
   var description = ""
 
-  /**
-    * Additional information to be printed at the end of the help string in this program.
-    */
+  /** Additional information to be printed at the end of the help string in this program. */
   var epilogue = ""
 
-  /**
-    * Custom usage information to be printed in the help string
-    */
+  /** Custom usage information to be printed in the help string */
   var usage = ""
 
   private var options: List[Opt] = Nil
-  private var argv = new Array[String](0)
+  private[commander] var argv = new Array[String](0)
 
-  /**
-    * Set the version of this program.
-    *
-    * @param v the version of this program
-    */
+  /** Set the version of this program.
+    * @param v the version of this program */
   def version(v: String): Program = {
     version = v
     this
   }
 
-  /**
-    * Set a description for this program
-    *
-    * @param d the description of this program
-    */
+  /** Set a description for this program
+    * @param d the description of this program */
   def description(d: String): Program= {
     description = d
     this
   }
 
-  /**
-    * Set an epilogue message for this program
-    *
-    * @param e the epilogue message
-    */
+  /** Set an epilogue message for this program
+    * @param e the epilogue message */
   def epilogue(e: String): Program = {
     epilogue = e
     this
   }
 
-  /**
-    * Set usage information for this program
-    *
-    * @param u the usage information
-    */
+  /** Set usage information for this program
+    * @param u the usage information */
   def usage(u: String): Program = {
     usage = u
     this
   }
-
-  /**
-    * Options will be set dynamically on this class in camelcase form. Do not
-    * use this method directly.
-    *
-    * @param name the name of the option to get a value for
-    */
+  /** Options will be set dynamically on this class in camelcase form. Do not use this method directly.
+    * @param name the name of the option to get a value for */
   def selectDynamic[T:ClassTag](name: String): T = {
-    // find the option
-    var opt: Opt = null
-
-    for (i <- options.indices) {
-      if (camelcase(options(i).name()) == name) {
-        opt = options(i)
-      }
-    }
-
-    if (opt == null) {
-      sys.error(s"option '$name' not found")
-    }
-
+    val opt: Opt = options.find(_.name==name).getOrElse { sys.error(s"option '$name' not found") }
     opt.value.asInstanceOf[T]
   }
 
-  /**
-    * Define option with `flags`, `description` and optional
-    * coercion `fn`.
+  /** Define option with `flags`, `description` and optional coercion `fn`.
     *
     * The `flags` string should contain both the short and long flags,
     * separated by comma, a pipe or space. The following are all valid
@@ -149,7 +107,6 @@ class Program(exitOnError: Boolean = true, exitOnCommand: Boolean = true) extend
     * </pre>
     *
     * Examples:
-    *
     * <pre>
     * // simple boolean defaulting to false
     * program.option("-p, --pepper", "add pepper")
@@ -167,24 +124,17 @@ class Program(exitOnError: Boolean = true, exitOnCommand: Boolean = true) extend
     * @param description  Description of this option for the help string
     * @param default      The default value when this option is not given
     * @param required     Whether this option is required for the program to run
-    * @param fn           Coercion function that takes the string value given on
-    *                     the command line and returns the value that will be
-    *                     given on the program object
-    */
+    * @param fn           Coercion function that takes the string value given on the command line and returns the value
+    *                     that will be given on the program object */
   def option(flags: String, description: String, default: Any = null, required: Boolean = false, fn: String => Any = identity): Program = {
     val opt = new Opt(flags, description, default=default, required=required, fn=fn)
-
-    // register the option
-    options = opt :: options
-
+    options = opt :: options // register the option
     this
   }
 
-  private var commands: List[Command] = List()
+  private var commands: List[Command] = List.empty
 
-  /**
-    * Define a command that will run the given class with `usage` and
-    * `description`.
+  /** Define a command that will run the given class with `usage` and `description`.
     *
     * The command will be defined as the hyphenated name of the class (e.g.,
     * SomeClass -> some-class). You can choose your own name for the command by
@@ -208,18 +158,14 @@ class Program(exitOnError: Boolean = true, exitOnCommand: Boolean = true) extend
     * @param klass The class that will handle this command. It should have a method with signature main(args: Array[String]) that will be called with remaining arguments.
     * @param usage Usage that will be displayed in the help message. The first word will be the name of the command if it begins with a word character.
     * @param description Description of this command to be displayed in the help string.
-    * @return Returns the program for chaining.
-    */
+    * @return Returns the program for chaining. */
   def command(klass: Class[_], usage: String = "", description: String = ""): Program = {
     commands = new Command(klass, usage, description) :: commands
     this
   }
 
-  /**
-    * Parse command line args
-    *
-    * @param argv  Args given to the `main()` method.
-    */
+  /** Parse command line args
+    * @param argv  Args given to the `main()` method. */
   def parse(argv: Array[String]): Program = {
     this.argv = argv
     val normalizedArgs = normalize(argv)
@@ -301,12 +247,9 @@ class Program(exitOnError: Boolean = true, exitOnCommand: Boolean = true) extend
       } else {
         args = args :+ arg
       }
-
       lastOpt = opt
     }
-
     validateOptions()
-
     this
   }
 
@@ -316,9 +259,8 @@ class Program(exitOnError: Boolean = true, exitOnCommand: Boolean = true) extend
       val arg = args(i)
       var lastOpt: Opt = null
 
-      if (i > 0) {
+      if (i > 0)
         lastOpt = optionFor(arg)
-      }
 
       if (arg == "--") {
         // TODO honor option terminator
@@ -333,41 +275,28 @@ class Program(exitOnError: Boolean = true, exitOnCommand: Boolean = true) extend
       } else {
         ret = ret :+ arg
       }
-
     }
-
     ret
   }
 
-  private def optionFor(arg: String): Opt = {
-    for (i <- options.indices) {
-      if (options(i).is(arg)) {
-        return options(i)
-      }
-    }
+  // FIXME never return null, use Option instead
+  private def optionFor(arg: String): Opt = options.find(_.is(arg)).orNull
 
-    null
-  }
-
-  private def camelcase(flag: String): String = {
+  private[commander] def camelcase(flag: String): String =
     flag.split('-')
       .filter(_ != "")
-      .reduce((str, word) => {
-        str + word.capitalize
-      })
-  }
+      .reduce((str, word) => str + word.capitalize)
 
   /**
     * Get a help string for this program.
     */
-  def helpInformation(): String = {
+  def helpInformation: String = {
     // XXX is this how you get the file name?
     var programName = new Exception().getStackTrace()(1).getFileName
-    if (programName.endsWith(".scala")) {
+    if (programName.endsWith(".scala"))
       programName = programName.take(programName.lastIndexOf("."))
-    }
 
-    val help = new StringBuilder()
+    val help = new StringBuilder
 
     // usage information
     if (usage == "") {
@@ -381,12 +310,11 @@ class Program(exitOnError: Boolean = true, exitOnCommand: Boolean = true) extend
     }
 
     // description
-    if (description != "") {
+    if (description != "")
       help
         .append("\n  ")
         .append(description)
         .append("\n")
-    }
 
     // commands
     if (commands.nonEmpty) {
@@ -420,63 +348,52 @@ class Program(exitOnError: Boolean = true, exitOnCommand: Boolean = true) extend
       .append("-h, --help".padTo(width, " ").mkString)
       .append("  output usage information\n")
 
-    if (hasVersion) {
+    if (hasVersion)
       help
         .append("    ")
         .append("-V, --version".padTo(width, " ").mkString)
         .append("  output the version number\n")
-    }
 
-    options.foreach((option) => {
+    options.foreach((option) =>
       help
         .append("    ")
         .append(option.flags.padTo(width, " ").mkString)
         .append("  ")
         .append(option.description)
         .append("\n")
-    })
+    )
 
-    // epilogue
-    if (epilogue != "") {
+    if (epilogue.nonEmpty)
       help.append("\n  ")
-      help.append(epilogue)
-      help.append("\n")
-    }
+        .append(epilogue)
+        .append("\n")
 
     help.result
   }
 
-  /**
-    * Print help information and exit
-    */
-  def help() = {
-    print(helpInformation())
+  /** Print help information and exit */
+  def help(): Unit = {
+    print(helpInformation)
     // XXX throws sbt.TrapExitSecurityException on `sbt run`
     sys.exit(0)
   }
 
-  /**
-    * Print version information and exit
-    */
-  private def outputVersion() = {
+  /** Print version information and exit */
+  private def outputVersion(): Unit = {
     println(version)
     sys.exit(0)
   }
 
-  private def outputHelpIfNecessary(args: Array[String]) = {
-    if (args.contains("--help") || args.contains("-h")) {
+  private def outputHelpIfNecessary(args: Array[String]): Unit =
+    if (args.contains("--help") || args.contains("-h"))
       help()
-    }
-  }
 
-  private def outputVersionIfNecessary(args: Array[String]) = {
-    if (hasVersion && (args.contains("--version") || args.contains("-V"))) {
+  private def outputVersionIfNecessary(args: Array[String]): Unit =
+    if (hasVersion && (args.contains("--version") || args.contains("-V")))
       outputVersion()
-    }
-  }
 
-  private def validateOptions() = {
-    options.foreach((o) => {
+  private def validateOptions(): Unit =
+    options.foreach((o) =>
       if (o.present && o.paramRequired && !o.givenParam) {
         // it was not given a required param
         val message = s"argument missing for ${o.name()}"
@@ -485,11 +402,9 @@ class Program(exitOnError: Boolean = true, exitOnCommand: Boolean = true) extend
         // option is required and not given
         val message = s"option missing: ${o.name()}"
         exitWithError(message)
-      }
     })
-  }
 
-  private def exitWithError(message: String, e: Exception = null) = {
+  private def exitWithError(message: String, e: Exception = null): Unit =
     if (exitOnError) {
       println(message)
       sys.exit(1)
@@ -498,5 +413,4 @@ class Program(exitOnError: Boolean = true, exitOnCommand: Boolean = true) extend
     } else {
       throw e
     }
-  }
 }

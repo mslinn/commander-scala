@@ -1,9 +1,8 @@
 package com.github.acrisci.commander
 
-import better.files._
-import com.github.acrisci.commander.commands._
+import java.io.File
 import com.github.acrisci.commander.errors.{InvalidCommandException, ProgramParseException}
-import org.scalatest.{Matchers, FlatSpec}
+import org.scalatest.{FlatSpec, Matchers}
 
 class TestProgram extends FlatSpec with Matchers{
   def testProgram: Program = {
@@ -117,19 +116,19 @@ class TestProgram extends FlatSpec with Matchers{
       .option("-p, --peppers", "Add peppers")
 
     val helpString = """
-Usage: TestProgram [options]
+      |Usage: TestProgram [options]
+      |
+      |  A test program
+      |
+      |  Options:
+      |
+      |    -h, --help     output usage information
+      |    -V, --version  output the version number
+      |    -p, --peppers  Add peppers
+      |
+      |  This is the epilogue""".stripMargin
 
-  A test program
-
-  Options:
-
-    -h, --help     output usage information
-    -V, --version  output the version number
-    -p, --peppers  Add peppers
-
-  This is the epilogue"""
-
-    assertResult(helpString.trim, "program should have a useful help string") { program.helpInformation().trim }
+    assertResult(helpString.trim, "program should have a useful help string") { program.helpInformation.trim }
 
     val usage = "java -jar my-program.jar [options]"
 
@@ -138,91 +137,133 @@ Usage: TestProgram [options]
       .usage(usage)
       .parse(Array())
 
-    assert(program.helpInformation().trim.startsWith(s"Usage: $usage"),
+    assert(program.helpInformation.trim.startsWith(s"Usage: $usage"),
       "the program should have the overridden usage string")
 
     program = new Program().parse(Array())
 
-    assert(!program.helpInformation().contains("--version"),
+    assert(!program.helpInformation.contains("--version"),
       "A program with no version should not have a --version option present in the help string")
   }
 
   "Program" should "properly execute commands when given" in {
-    def file = "/"/"tmp"/"commander-scala-test"/"command-one-flag"
+    val helpFile: File = {
+      val file = File.createTempFile("commander-scala-test/command-one-flag", "")
+      file.delete()
+      file
+    }
 
-    def reset = file.delete(swallowIOExceptions=true)
+    def reset() = try { helpFile.delete() } catch { case _: Exception => }
 
-    def programWithCommands = new Program(exitOnError=false, exitOnCommand=false)
-      .version("1.0.0")
-      .command(classOf[CommandThatDoesNothing], "do-nothing", "it does nothing at all")
-      .description("A program with commands.")
+    def programWithCommands = try {
+      new Program(exitOnError=false, exitOnCommand=false)
+        .version("1.0.0")
+        .command(classOf[CommandThatDoesNothing], "do-nothing", "it does nothing at all")
+        .description("A program with commands.")
+    } catch {
+      case e: Exception =>
+        sys.error(e.getMessage)
+    }
+    reset()
 
-    reset
+    val helpString1 = """
+      |  Usage: TestProgram [options] [command]
+      |
+      |  A program with commands.
+      |
+      |  Commands:
+      |
+      |    command-that-writes-a-file [path]  it creates a file when it runs
+      |    do-nothing                         it does nothing at all
+      |    help [cmd]                         Display help for [cmd]
+      |
+      |  Options:
+      |
+      |    -h, --help     output usage information
+      |    -V, --version  output the version number
+      |""".stripMargin
 
-    var program = programWithCommands
-      .command(classOf[CommandThatWritesAFile], "[path]", "it creates a file when it runs")
-      .parse(Array("command-that-writes-a-file", file.pathAsString))
+    try {
+      val program = programWithCommands
+        .command(classOf[CommandThatWritesAFile], "[path]", "it creates a file when it runs")
+        .parse(Array("command-that-writes-a-file", helpFile.getPath))
 
-    assert(file.exists(), "the command should run when the hyphen-case name of the class is given")
-    reset
+      cleanUp(helpString1) shouldBe cleanUp(program.helpInformation)
+    } catch { case e: Exception =>
+      System.err.println(e.getMessage)
+      System.exit(-1)
+    }
+    assert(helpFile.exists, "the command should run when the hyphen-case name of the class is given") // fails
+    reset()
 
-    var helpString = """
-  Usage: TestProgram [options] [command]
+    val helpString2 = """
+      |  Usage: TestProgram [options] [command]
+      |
+      |  A program with commands.
+      |
+      |  Commands:
+      |
+      |    write [path]  it has the name overridden
+      |    do-nothing    it does nothing at all
+      |    help [cmd]    Display help for [cmd]
+      |
+      |  Options:
+      |
+      |    -h, --help     output usage information
+      |    -V, --version  output the version number
+      |""".stripMargin
 
-  A program with commands.
-
-  Commands:
-
-    command-that-writes-a-file [path]  it creates a file when it runs
-    do-nothing                         it does nothing at all
-    help [cmd]                         Display help for [cmd]
-
-  Options:
-
-    -h, --help     output usage information
-    -V, --version  output the version number
-                        """
-
-    assertResult(helpString.trim, "the program should format help string info correctly for commands") { program.helpInformation().trim }
-
-    program = programWithCommands
+    val program2 = programWithCommands
       .command(classOf[CommandThatWritesAFile], "write [path]", "it has the name overridden")
-      .parse(Array("write", file.pathAsString))
+      .parse(Array("write", helpFile.getPath))
 
-    assert(file.exists(), "the command should run when the overridden name is given")
-    reset
+    assert(helpFile.exists, "the command should run when the overridden name is given")
+    reset()
 
-    helpString = """
-  Usage: TestProgram [options] [command]
-
-  A program with commands.
-
-  Commands:
-
-    write [path]  it has the name overridden
-    do-nothing    it does nothing at all
-    help [cmd]    Display help for [cmd]
-
-  Options:
-
-    -h, --help     output usage information
-    -V, --version  output the version number
-                     """
-
-    assertResult(helpString.trim, "the program should format help string info correctly for commands") { program.helpInformation().trim }
-    reset
+    assertResult(helpString2.trim, "the program should format help string info correctly for commands") { program2.helpInformation.trim }
+    reset()
   }
 
   "Commands" should "have implicit help" in {
-    def file = new CommandThatWritesOnHelp().file
-    def reset() = file.delete(swallowIOExceptions=true)
+    def file: File = new CommandThatWritesOnHelp().file
+    def reset() = try { file.delete() } catch { case _: Exception => }
     reset()
 
     new Program(exitOnCommand=false)
       .command(classOf[CommandThatWritesOnHelp], "command-with-help")
       .parse(Array("help", "command-with-help"))
 
-    assert(file.exists())
+    assert(file.exists, "File does not exist")
     reset()
+  }
+
+  def cleanUp(string: String): String = string.trim.replaceAll("\\s+", " ")
+}
+
+class CommandThatDoesNothing {
+  def main(args: Array[String]): Unit = {}
+}
+
+class CommandThatHasNoMain
+
+class CommandThatWritesAFile {
+  def main(args: Array[String]): Unit = {
+    val file =  new File(args(0))
+    file.setLastModified(new java.util.Date().getTime)
+    ()
+  }
+}
+
+class CommandThatWritesOnHelp {
+  def file(): File = File.createTempFile("implicit-help-flag", "")
+
+  def main(args: Array[String]): Unit = {
+    file()
+  }
+}
+
+class CommandWithInvalidMain {
+  def main(invalidArg: String): Unit = {
+    // main should have arguments of type Array[String]
   }
 }

@@ -1,6 +1,6 @@
 package com.github.acrisci.commander
 
-private class Opt(var flags: String, var description: String, var default: Any = null, var required: Boolean = false, var fn: String => Any = identity) {
+private[commander] class Opt(var flags: String, var description: String, var default: Any = null, var required: Boolean = false, var fn: String => Any = identity) {
   var paramRequired: Boolean = flags.contains("<")
   var paramOptional: Boolean = flags.contains("[")
   private val flagsList = splitFlags(flags)
@@ -9,6 +9,7 @@ private class Opt(var flags: String, var description: String, var default: Any =
   var givenParam = false
   var present = false
 
+  // FIXME the single backslash is probably an error
   if (flagsList.length > 1 && !flagsList(1).matches(raw"^[\[<].*")) {
     short = flagsList(0)
     long = flagsList(1)
@@ -16,7 +17,7 @@ private class Opt(var flags: String, var description: String, var default: Any =
     long = flagsList(0)
   }
 
-  var value: Any = null
+  var value: Any = _
 
   if (takesParam || default != null) {
     value = default
@@ -24,17 +25,11 @@ private class Opt(var flags: String, var description: String, var default: Any =
     value = false
   }
 
-  private def splitFlags(flags: String) :Array[String] = {
-    "[ ,|]+".r.split(flags)
-  }
+  private def splitFlags(flags: String): Array[String] = "[ ,|]+".r.split(flags)
 
-  def name() :String = {
-    long.replaceAll("--", "").replaceAll("no-", "")
-  }
+  def name(): String = long.replaceAll("--", "").replaceAll("no-", "")
 
-  def is(arg: String): Boolean = {
-    arg == short || arg == long
-  }
+  def is(arg: String): Boolean = arg == short || arg == long
 
   def takesParam(): Boolean = paramRequired || paramOptional
 }
